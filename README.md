@@ -1,5 +1,10 @@
 # 多设备状态监控系统
 
+![License](https://img.shields.io/github/license/moto161/DeviceMonitor)
+![Last Commit](https://img.shields.io/github/last-commit/moto161/DeviceMonitor)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux%20%7C%20OpenWrt%20%7C%20Windows-4c1)
+![Android](https://img.shields.io/badge/Android-Kotlin%20%2B%20Compose-7f52ff)
+![Server](https://img.shields.io/badge/Server-Node.js%20Express-339933)
 一个赛博朋克科幻风格的多设备状态监控系统，支持监控服务器、手机、路由器、电脑等设备的 CPU、内存、硬盘、温度、电量、运行时间等实时状态。
 
 ## 快速配置（重要）
