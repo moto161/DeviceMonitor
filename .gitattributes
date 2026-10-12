@@ -1,0 +1,22 @@
+# 统一换行符：Shell 脚本必须 LF（CRLF 上 Linux 会因 \r 直接跑挂）
+*.sh text eol=lf
+*.init text eol=lf
+device-agent text eol=lf
+device-agent.service text eol=lf
+
+# Windows 脚本保持 CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.vbs text eol=crlf
+
+# 其余文本默认 LF
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.kt text eol=lf
+*.xml text eol=lf
+*.gradle text eol=lf
+*.yml text eol=lf
+*.properties text eol=lf
+*.cs text eol=lf
+.gitignore text eol=lf

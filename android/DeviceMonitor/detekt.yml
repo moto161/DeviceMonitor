@@ -1,0 +1,148 @@
+# detekt 配置 - 设备监控APP
+# 基于默认配置，针对Compose项目调整
+
+build:
+  maxIssues: 0  # 发现问题就报错，强制修复
+  excludeCorrectable: false
+  weights:
+    complexity: 2
+    LongParameterList: 1
+    LongMethod: 1
+
+style:
+  active: true
+  MaxLineLength:
+    active: true
+    maxLineLength: 160  # Compose代码较长，放宽到160
+  WildcardImport:
+    active: true
+    excludeImports:
+      - 'androidx.compose.material3.*'
+      - 'androidx.compose.material.*'
+      - 'androidx.compose.runtime.*'
+      - 'androidx.compose.foundation.*'
+      - 'androidx.compose.foundation.layout.*'
+      - 'androidx.compose.ui.*'
+      - 'androidx.compose.material.icons.filled.*'
+      - 'androidx.compose.animation.core.*'
+      - 'kotlinx.coroutines.*'
+      - 'com.devicemonitor.app.ui.theme.*'
+      - 'com.devicemonitor.app.components.*'
+      - 'com.devicemonitor.app.data.*'
+  MagicNumber:
+    active: true
+    excludes: ['**/test/**', '**/androidTest/**', '**/theme/**', '**/Color.kt']
+    ignoreNumbers: ['-1', '-10', '-90f', '0', '1', '2', '3', '4', '5', '6', '8', '10', '15', '16', '24', '30', '32', '45', '60', '64', '75', '80', '90', '100', '120', '128', '180', '200', '256', '360', '512', '1000', '1024', '3000', '3600', '86400', '1000000', '0.4f', '0.6f', '0.7f', '90f', '360f', '0xFF']
+    ignoreHashCodeFunction: true
+    ignorePropertyDeclaration: true
+    ignoreConstantDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreNamedArgument: true
+    ignoreEnums: true
+    ignoreRanges: true
+  ReturnCount:
+    active: true
+    max: 4  # 放宽，Compose函数常有多个return
+  ThrowsCount:
+    active: true
+    max: 3
+
+complexity:
+  active: true
+  LongMethod:
+    active: true
+    threshold: 120  # Compose UI函数较长，放宽到120行
+  LongParameterList:
+    active: true
+    functionThreshold: 10
+    constructorThreshold: 12
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 40  # Compose UI函数分支多，放宽到40
+  NestedBlockDepth:
+    active: true
+    threshold: 6
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 25
+    thresholdInClasses: 20
+    thresholdInObjects: 20
+    thresholdInInterfaces: 12
+
+performance:
+  active: true
+  SpreadOperator:
+    active: true
+  UnnecessaryTemporaryInstantiation:
+    active: true
+
+exceptions:
+  active: true
+  SwallowedException:
+    active: true
+    ignoredExceptionTypes: ['InterruptedException', 'MalformedURLException']
+  TooGenericExceptionCaught:
+    active: true
+    exceptionNames: ['ArrayIndexOutOfBoundsException', 'IndexOutOfBoundsException', 'Exception', 'Throwable']
+  TooGenericExceptionThrown:
+    active: true
+    exceptionNames: ['Exception', 'Throwable']
+
+potential-bugs:
+  active: true
+  Deprecation:
+    active: true
+  UnreachableCode:
+    active: true
+  UnsafeCallOnNullableType:
+    active: true
+  UnsafeCast:
+    active: true
+
+empty-blocks:
+  active: true
+  EmptyCatchBlock:
+    active: true
+  EmptyFunctionBlock:
+    active: true
+  EmptyIfBlock:
+    active: true
+  EmptyElseBlock:
+    active: true
+
+naming:
+  active: true
+  FunctionNaming:
+    active: true
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'  # Compose函数大写开头是规范
+    excludeClassPattern: '$[a-zA-Z0-9$]*'
+  VariableNaming:
+    active: true
+    variablePattern: '[a-z][a-zA-Z0-9]*'
+    privateVariablePattern: '(_)?[a-z][A-Za-z0-9]*'
+  ClassNaming:
+    active: true
+    classPattern: '[A-Z][a-zA-Z0-9]*'
+  PackageNaming:
+    active: true
+    packagePattern: '[a-z]+(\.[a-z][a-z0-9]*)*'
+
+comments:
+  active: true
+  AbsentOrWrongFileLicense:
+    active: false  # 不强制许可证头
+  CommentOverPrivateFunction:
+    active: false
+  CommentOverPrivateProperty:
+    active: false
+  EndOfSentenceFormat:
+    active: false
+  OutdatedDocumentation:
+    active: false
+
+# 针对Compose项目的特殊排除
+config:
+  validation: true
+  warningsAsErrors: false
+  checkExhaustiveness: true

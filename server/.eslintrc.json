@@ -1,0 +1,47 @@
+{
+  "env": {
+    "node": true,
+    "es2021": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": "latest"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-console": "off",
+    "no-empty": ["error", { "allowEmptyCatch": false }],
+    "no-constant-condition": "warn",
+    "no-unreachable": "error",
+    "no-undef": "error",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-empty-pattern": "error",
+    "no-ex-assign": "error",
+    "no-extra-boolean-cast": "warn",
+    "no-extra-semi": "warn",
+    "no-fallthrough": "warn",
+    "no-global-assign": "error",
+    "no-inner-declarations": "warn",
+    "no-misleading-character-class": "warn",
+    "no-obj-calls": "error",
+    "no-prototype-builtins": "warn",
+    "no-regex-spaces": "warn",
+    "no-sparse-arrays": "error",
+    "no-template-curly-in-string": "warn",
+    "no-unexpected-multiline": "warn",
+    "no-unsafe-finally": "error",
+    "no-unsafe-negation": "error",
+    "use-isnan": "error",
+    "valid-typeof": "error",
+    "no-case-declarations": "warn",
+    "no-return-assign": "warn",
+    "no-self-assign": "warn",
+    "no-self-compare": "warn",
+    "no-useless-escape": "warn",
+    "require-await": "warn",
+    "no-var": "warn",
+    "prefer-const": "warn",
+    "eqeqeq": ["warn", "always"]
+  }
+}

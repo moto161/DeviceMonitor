@@ -1,0 +1,43 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 外圆环 -->
+    <path
+        android:fillColor="#00FFFF"
+        android:pathData="M54,30m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <!-- 中间连接线 -->
+    <path
+        android:strokeColor="#00FFFF"
+        android:strokeWidth="2"
+        android:pathData="M54,34 L54,48" />
+    <!-- 中间节点 -->
+    <path
+        android:fillColor="#A855F7"
+        android:pathData="M54,52m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <!-- 左下连接线 -->
+    <path
+        android:strokeColor="#00FFFF"
+        android:strokeWidth="2"
+        android:pathData="M50,55 L38,68" />
+    <!-- 右下连接线 -->
+    <path
+        android:strokeColor="#00FFFF"
+        android:strokeWidth="2"
+        android:pathData="M58,55 L70,68" />
+    <!-- 左下节点 -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M36,72m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <!-- 右下节点 -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M72,72m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <!-- 底部连接线 -->
+    <path
+        android:strokeColor="#00FFFF"
+        android:strokeWidth="2"
+        android:pathData="M40,72 L68,72" />
+</vector>

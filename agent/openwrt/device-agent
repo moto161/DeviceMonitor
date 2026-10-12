@@ -1,0 +1,387 @@
+#!/bin/sh
+# ============================================
+# 设备监控 OpenWrt Agent（软路由 / 嵌入式设备通用）
+# 安装位置: /etc/init.d/device-agent
+# 用法: /etc/init.d/device-agent start/stop/enable
+# ============================================
+
+START=99
+STOP=10
+
+# ========== 配置区 ==========
+SERVER_URL="http://YOUR_SERVER_IP:8443"
+DEVICE_ID="your-router-id"   # TODO: 改成你的设备唯一标识
+DEVICE_NAME="My Router"       # TODO: 改成你的设备展示名
+DEVICE_TYPE="router"
+INTERVAL=30
+API_KEY="YOUR_API_KEY"
+
+# 断线缓存配置（OpenWrt存储空间有限，上限50条）
+CACHE_FILE="/tmp/device-agent-cache.log"
+MAX_CACHE=50
+
+PIDFILE="/var/run/device-agent.pid"
+LOGFILE="/var/log/device-agent.log"
+
+# ========== 采集函数 ==========
+
+get_cpu_usage() {
+  cpu1=$(cat /proc/stat | head -1 | awk '{print $2+$3+$4+$5+$6+$7+$8}')
+  idle1=$(cat /proc/stat | head -1 | awk '{print $5}')
+  sleep 1
+  cpu2=$(cat /proc/stat | head -1 | awk '{print $2+$3+$4+$5+$6+$7+$8}')
+  idle2=$(cat /proc/stat | head -1 | awk '{print $5}')
+  total=$((cpu2 - cpu1))
+  idle=$((idle2 - idle1))
+  if [ "$total" -gt 0 ]; then
+    usage=$(awk "BEGIN {printf \"%.1f\", (1 - $idle / $total) * 100}")
+  else
+    usage="0.0"
+  fi
+  echo "$usage"
+}
+
+get_cpu_cores() {
+  nproc 2>/dev/null || cat /proc/cpuinfo | grep -c processor
+}
+
+get_cpu_model() {
+  # x86 架构
+  model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed 's/^ *//;s/ *$//')
+  if [ -n "$model" ]; then
+    echo "$model"
+    return
+  fi
+  # ARM 架构：根据 CPU part 号识别
+  part=$(grep -m1 "CPU part" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed 's/^ *//;s/ *$//')
+  hw=$(grep -m1 "Hardware" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed 's/^ *//;s/ *$//')
+  case "$part" in
+    0xd03) model="ARM Cortex-A53" ;;
+    0xd04) model="ARM Cortex-A35" ;;
+    0xd05) model="ARM Cortex-A55" ;;
+    0xd07) model="ARM Cortex-A57" ;;
+    0xd08) model="ARM Cortex-A72" ;;
+    0xd0b) model="ARM Cortex-A76" ;;
+    0xd0c) model="ARM Neoverse N1" ;;
+    0xd0f) model="ARM Cortex-A77" ;;
+    0xd4a) model="ARM Neoverse N2" ;;
+    *) model="" ;;
+  esac
+  if [ -n "$hw" ] && [ -n "$model" ]; then
+    echo "$model ($hw)"
+  elif [ -n "$hw" ]; then
+    echo "$hw"
+  else
+    echo "$model"
+  fi
+}
+
+get_cpu_temp() {
+  temp=""
+  # OpenWrt 温度读取
+  if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+    raw=$(cat /sys/class/thermal/thermal_zone0/temp)
+    if [ "$raw" -gt 1000 ]; then
+      temp=$(awk "BEGIN {printf \"%.1f\", $raw / 1000}")
+    else
+      temp="$raw"
+    fi
+  fi
+  # 尝试其他温度传感器
+  if [ -z "$temp" ]; then
+    for zone in /sys/class/hwmon/hwmon*/temp*_input; do
+      if [ -f "$zone" ]; then
+        raw=$(cat "$zone")
+        if [ "$raw" -gt 1000 ]; then
+          val=$(awk "BEGIN {printf \"%.0f\", $raw / 1000}")
+        else
+          val="$raw"
+        fi
+        if [ "$val" -gt 0 ] && [ "$val" -lt 120 ]; then
+          temp="$val"
+          break
+        fi
+      fi
+    done
+  fi
+  echo "${temp:-0}"
+}
+
+get_memory() {
+  # 直接读取 /proc/meminfo（所有Linux标准接口，单位KB）
+  total=$(awk '/MemTotal:/ {print $2}' /proc/meminfo)
+  free_mem=$(awk '/MemFree:/ {print $2}' /proc/meminfo)
+  available=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo)
+  cached=$(awk '/^Cached:/ {print $2}' /proc/meminfo)
+  buffers=$(awk '/^Buffers:/ {print $2}' /proc/meminfo)
+
+  # 兼容旧内核没有MemAvailable的情况
+  if [ -z "$available" ] || [ "$available" = "0" ]; then
+    available=$((free_mem + ${cached:-0} + ${buffers:-0}))
+  fi
+
+  used=$((total - available))
+
+  # KB -> 字节
+  total=$((total * 1024))
+  used=$((used * 1024))
+  available=$((available * 1024))
+
+  if [ "$total" -gt 0 ]; then
+    usage=$(awk "BEGIN {printf \"%.1f\", $used / $total * 100}")
+  else
+    usage="0.0"
+  fi
+  echo "$total|$used|$available|$usage"
+}
+
+get_disks() {
+  # 先用临时文件保存 df 输出，避免管道子shell导致变量丢失
+  tmpfile="/tmp/df_output_$$"
+  df -k 2>/dev/null | grep -vE "tmpfs|devtmpfs|overlay|Filesystem|none|rom" > "$tmpfile"
+  disks="["
+  first=1
+  while read line; do
+    filesystem=$(echo "$line" | awk '{print $1}')
+    total=$(echo "$line" | awk '{print $2}')
+    used=$(echo "$line" | awk '{print $3}')
+    mount=$(echo "$line" | awk '{print $6}')
+    if [ "$total" -lt 1024 ] 2>/dev/null; then
+      continue
+    fi
+    total_bytes=$((total * 1024))
+    used_bytes=$((used * 1024))
+    usage=$(awk "BEGIN {printf \"%.1f\", $used / $total * 100}")
+    if [ "$first" -eq 1 ]; then
+      first=0
+    else
+      disks="$disks,"
+    fi
+    disks="$disks{\"filesystem\":\"$filesystem\",\"mount\":\"$mount\",\"total\":$total_bytes,\"used\":$used_bytes,\"usage\":$usage}"
+  done < "$tmpfile"
+  rm -f "$tmpfile"
+  disks="$disks]"
+  echo "$disks"
+}
+
+get_uptime() {
+  if [ -f /proc/uptime ]; then
+    cat /proc/uptime | awk '{print int($1)}'
+  else
+    echo "0"
+  fi
+}
+
+get_load() {
+  load1=$(cat /proc/loadavg | awk '{print $1}')
+  load5=$(cat /proc/loadavg | awk '{print $2}')
+  load15=$(cat /proc/loadavg | awk '{print $3}')
+  echo "$load1|$load5|$load15"
+}
+
+get_network() {
+  # 获取 LAN 口 IP
+  ip_addr=$(ifconfig br-lan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d: -f2)
+  if [ -z "$ip_addr" ]; then
+    ip_addr=$(ip addr show br-lan 2>/dev/null | grep 'inet ' | head -1 | awk '{print $2}' | cut -d/ -f1)
+  fi
+  if [ -z "$ip_addr" ]; then
+    ip_addr=$(ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' | cut -d: -f2)
+  fi
+  echo "$ip_addr"
+}
+
+get_wan_info() {
+  # WAN 口状态
+  wan_status="unknown"
+  wan_ip=""
+  if ifconfig eth1 2>/dev/null | grep -q 'inet '; then
+    wan_status="connected"
+    wan_ip=$(ifconfig eth1 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d: -f2)
+  fi
+  echo "$wan_status|$wan_ip"
+}
+
+get_clients_count() {
+  # 在线客户端数量（通过ARP表）
+  cat /proc/net/arp 2>/dev/null | grep -v '0x0' | grep -v 'IP address' | wc -l
+}
+
+get_system_info() {
+  os_name="OpenWrt"
+  os_version=""
+  if [ -f /etc/openwrt_release ]; then
+    . /etc/openwrt_release
+    os_name="$DISTRIB_ID"
+    os_version="$DISTRIB_RELEASE"
+  fi
+  architecture=$(uname -m 2>/dev/null || echo "unknown")
+  hostname_val=$(uci get system.@system[0].hostname 2>/dev/null || cat /proc/sys/kernel/hostname 2>/dev/null || echo "unknown")
+  kernel_version=$(uname -r 2>/dev/null || echo "unknown")
+  echo "${os_name}|${os_version}|${architecture}|${hostname_val}|${kernel_version}"
+}
+
+# ========== 主循环 ==========
+
+# 上报单条数据，成功返回0，失败返回1
+report_once() {
+  payload="$1"
+  if command -v uclient-fetch >/dev/null 2>&1; then
+    if uclient-fetch -q -O- --post-data="$payload" \
+      --header="Content-Type: application/json" \
+      --header="x-api-key: $API_KEY" \
+      "$SERVER_URL/api/report" >/dev/null 2>&1; then
+      return 0
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    if wget -q -O- --post-data="$payload" \
+      --header="Content-Type: application/json" \
+      --header="x-api-key: $API_KEY" \
+      "$SERVER_URL/api/report" >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# 补报缓存中的失败数据
+flush_cache() {
+  [ -f "$CACHE_FILE" ] || return
+  [ -s "$CACHE_FILE" ] || return
+  while IFS= read -r cached_payload; do
+    [ -z "$cached_payload" ] && continue
+    if report_once "$cached_payload"; then
+      sed -i '1d' "$CACHE_FILE" 2>/dev/null
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] 补报缓存成功" >> "$LOGFILE"
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] 补报缓存失败，待网络恢复" >> "$LOGFILE"
+      break
+    fi
+  done < "$CACHE_FILE"
+}
+
+# 写入缓存（限制最大条数）
+save_to_cache() {
+  echo "$1" >> "$CACHE_FILE"
+  cache_count=$(wc -l < "$CACHE_FILE" 2>/dev/null || echo 0)
+  if [ "$cache_count" -gt "$MAX_CACHE" ]; then
+    sed -i "1,$((cache_count - MAX_CACHE))d" "$CACHE_FILE" 2>/dev/null
+  fi
+}
+run_agent() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Agent 启动" >> "$LOGFILE"
+  echo "设备: $DEVICE_NAME ($DEVICE_ID)" >> "$LOGFILE"
+  echo "服务器: $SERVER_URL" >> "$LOGFILE"
+
+  while true; do
+    cpu_usage=$(get_cpu_usage)
+    cpu_cores=$(get_cpu_cores)
+    cpu_temp=$(get_cpu_temp)
+    cpu_model=$(get_cpu_model)
+    mem_info=$(get_memory)
+    mem_total=$(echo "$mem_info" | cut -d'|' -f1)
+    mem_used=$(echo "$mem_info" | cut -d'|' -f2)
+    mem_available=$(echo "$mem_info" | cut -d'|' -f3)
+    mem_usage=$(echo "$mem_info" | cut -d'|' -f4)
+    disks=$(get_disks)
+    uptime_sec=$(get_uptime)
+    load_info=$(get_load)
+    load1=$(echo "$load_info" | cut -d'|' -f1)
+    load5=$(echo "$load_info" | cut -d'|' -f2)
+    load15=$(echo "$load_info" | cut -d'|' -f3)
+    ip_addr=$(get_network)
+    wan_info=$(get_wan_info)
+    wan_status=$(echo "$wan_info" | cut -d'|' -f1)
+    wan_ip=$(echo "$wan_info" | cut -d'|' -f2)
+    clients=$(get_clients_count)
+    sys_info=$(get_system_info)
+    os_name=$(echo "$sys_info" | cut -d'|' -f1)
+    os_version=$(echo "$sys_info" | cut -d'|' -f2)
+    architecture=$(echo "$sys_info" | cut -d'|' -f3)
+    hostname_val=$(echo "$sys_info" | cut -d'|' -f4)
+    kernel_version=$(echo "$sys_info" | cut -d'|' -f5)
+
+    json_data="{"
+    json_data="$json_data\"cpu_usage\":$cpu_usage,"
+    json_data="$json_data\"cpu_cores\":$cpu_cores,\"cpu_model\":\"$cpu_model\","
+    json_data="$json_data\"cpu_temp\":$cpu_temp,"
+    json_data="$json_data\"memory_total\":$mem_total,"
+    json_data="$json_data\"memory_used\":$mem_used,"
+    json_data="$json_data\"memory_available\":$mem_available,"
+    json_data="$json_data\"memory_usage\":$mem_usage,"
+    json_data="$json_data\"disks\":$disks,"
+    json_data="$json_data\"uptime\":$uptime_sec,"
+    json_data="$json_data\"load_1\":$load1,"
+    json_data="$json_data\"load_5\":$load5,"
+    json_data="$json_data\"load_15\":$load15,"
+    json_data="$json_data\"ip_address\":\"$ip_addr\","
+    json_data="$json_data\"wan_status\":\"$wan_status\","
+    json_data="$json_data\"wan_ip\":\"$wan_ip\","
+    json_data="$json_data\"clients_count\":$clients,"
+    json_data="$json_data\"os\":\"$os_name\","
+    json_data="$json_data\"os_version\":\"$os_version\","
+    json_data="$json_data\"architecture\":\"$architecture\","
+    json_data="$json_data\"hostname\":\"$hostname_val\","
+    json_data="$json_data\"kernel_version\":\"$kernel_version\""
+    json_data="$json_data}"
+
+    # 构建完整上报 payload（设备标识必须放在 JSON body 中）
+    payload="{\"device_id\":\"$DEVICE_ID\",\"device_name\":\"$DEVICE_NAME\",\"device_type\":\"$DEVICE_TYPE\",\"data\":$json_data}"
+
+    # 先补报缓存中的历史数据
+    flush_cache
+
+    # 上报当前数据，失败则缓存待补报
+    if report_once "$payload"; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] 上报成功" >> "$LOGFILE"
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] 上报失败，已缓存待补报" >> "$LOGFILE"
+      save_to_cache "$payload"
+    fi
+
+    sleep $INTERVAL
+  done
+}
+
+start() {
+  if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+    echo "Agent 已在运行"
+    return
+  fi
+  echo "启动设备监控 Agent..."
+  run_agent &
+  echo $! > "$PIDFILE"
+  echo "Agent 已启动，PID: $(cat $PIDFILE)"
+}
+
+stop() {
+  if [ -f "$PIDFILE" ]; then
+    pid=$(cat "$PIDFILE")
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid"
+      echo "Agent 已停止"
+    fi
+    rm -f "$PIDFILE"
+  else
+    echo "Agent 未运行"
+  fi
+}
+
+restart() {
+  stop
+  sleep 1
+  start
+}
+
+status() {
+  if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+    echo "Agent 运行中，PID: $(cat $PIDFILE)"
+    echo "日志: $LOGFILE"
+    tail -5 "$LOGFILE" 2>/dev/null
+  else
+    echo "Agent 未运行"
+  fi
+}
+
+# 直接前台运行（供procd调用）
+run_agent

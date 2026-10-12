@@ -1,0 +1,12 @@
+[Unit]
+Description=Device Monitor Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh /usr/local/bin/device-agent.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

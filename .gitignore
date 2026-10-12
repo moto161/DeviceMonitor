@@ -1,0 +1,30 @@
+# 依赖
+**/node_modules/
+
+# 构建产物
+**/build/
+**/.gradle/
+**/.kotlin/
+**/.cxx/
+*.apk
+*.aab
+
+# 运行数据与日志
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+**/agent.log*
+**/agent-watcher.log*
+
+# IDE / 临时
+.idea/
+*.iml
+**/replay_pid*.log
+**/build_log*.txt
+**/detekt-report.*
+**/local.properties
+
+# 大文件组件（OpenHardwareMonitor 分发包，另行归档，不入库）
+agent/windows/openhardwaremonitor/
+agent/windows/TempReader.exe
