@@ -1,6 +1,6 @@
 {
-  "versionName": "1.9.0",
-  "versionCode": 44,
-  "downloadUrl": "http://YOUR_SERVER_IP:8081/apk/DeviceMonitor_v1.9.0.apk",
-  "releaseNotes": "流畅度打磨：状态指示灯仅在线时脉冲且改走合成层（不再每帧重绘阴影）；指标进度条改用合成层缩放，不再每帧触发布局重算；页面切换加入淡入淡出+轻微位移转场；骨架屏呼吸改用缓入缓出更柔和；移除未使用的扫描线特效"
+  "versionName": "1.9.2",
+  "versionCode": 46,
+  "downloadUrl": "http://YOUR_SERVER_IP:8081/apk/DeviceMonitor_v1.9.2.apk",
+  "releaseNotes": "新增 API Key 配置入口：设置页可自定义 API Key、一键恢复默认，更换服务端密钥无需重装 APP"
 }

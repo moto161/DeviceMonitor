@@ -174,6 +174,7 @@ Stop-ScheduledTask -TaskName DeviceAgentWatcher       # 暂停守护
 - 系统概览（在线/离线/告警统计）
 - 自动刷新（30秒）
 - 服务器地址可配置
+- API Key 可配置（自定义 / 一键恢复默认，保存后即时生效）
 
 ## 告警规则
 
