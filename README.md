@@ -201,4 +201,4 @@ Stop-ScheduledTask -TaskName DeviceAgentWatcher       # 暂停守护
 
 ## 许可证
 
-MIT License
+本项目基于 [MIT License](LICENSE) 开源。
