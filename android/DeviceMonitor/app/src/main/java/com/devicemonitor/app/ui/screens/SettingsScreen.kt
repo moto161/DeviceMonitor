@@ -22,6 +22,7 @@ import com.devicemonitor.app.data.ApiClient
 import com.devicemonitor.app.ui.theme.*
 import com.devicemonitor.app.util.AppUpdateHelper
 import com.devicemonitor.app.util.Constants
+import com.devicemonitor.app.util.EncryptedPrefsHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -44,6 +45,13 @@ fun SettingsScreen(
     var updateInfo by remember { mutableStateOf<AppUpdateHelper.UpdateInfo?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
+
+    // API Key 配置
+    val encryptedPrefs = remember { EncryptedPrefsHelper(context) }
+    var tempApiKey by remember { mutableStateOf("") }
+    // getApiKey() 无值时返回内置默认 Key，据此判断是否已被用户覆盖
+    var isUsingCustomKey by remember { mutableStateOf(encryptedPrefs.getApiKey() != Constants.API_KEY) }
+    var apiKeySaved by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = CyberBlack,
@@ -213,6 +221,106 @@ fun SettingsScreen(
                                 color = if (testSuccess) NeonGreen else NeonRed,
                                 fontSize = 12.sp
                             )
+                        }
+                    }
+                }
+            }
+
+            // API Key 配置
+            CyberCard(
+                modifier = Modifier.fillMaxWidth(),
+                glowColor = NeonGreen
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    GlowText(
+                        text = "API KEY",
+                        color = NeonGreen,
+                        fontSize = 12,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = tempApiKey,
+                        onValueChange = { tempApiKey = it; apiKeySaved = false },
+                        label = { Text("API Key", color = TextSecondary) },
+                        placeholder = { Text("与服务端 API_KEY 保持一致", color = TextMuted) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = NeonGreen,
+                            unfocusedBorderColor = CyberBorder,
+                            cursorColor = NeonGreen
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isUsingCustomKey) Icons.Default.Lock else Icons.Default.LockOpen,
+                            contentDescription = null,
+                            tint = if (isUsingCustomKey) NeonGreen else TextMuted,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isUsingCustomKey) "当前使用自定义 Key" else "当前使用内置默认 Key",
+                            color = if (isUsingCustomKey) NeonGreen else TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val key = tempApiKey.trim()
+                                if (key.isNotEmpty()) {
+                                    encryptedPrefs.setApiKey(key)
+                                    ApiClient.setApiKey(key)
+                                    tempApiKey = ""
+                                    isUsingCustomKey = true
+                                    apiKeySaved = true
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = NeonGreen,
+                                contentColor = CyberBlack
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("保存", fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                encryptedPrefs.setApiKey(Constants.API_KEY)
+                                ApiClient.setApiKey(Constants.API_KEY)
+                                tempApiKey = ""
+                                isUsingCustomKey = false
+                                apiKeySaved = false
+                            },
+                            enabled = isUsingCustomKey,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = NeonGreen,
+                                disabledContentColor = TextMuted
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.RestartAlt, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("恢复默认")
+                        }
+                    }
+                    if (apiKeySaved) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, tint = NeonGreen, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("API Key 已保存，下次请求立即生效", color = NeonGreen, fontSize = 12.sp)
                         }
                     }
                 }
